@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+</head>
+<body>
+<form name="form">
+    <input name="file" type="file">
+</form>
+<script>
+    document.forms.form.file.onchange = async (e) => {
+        if (!e.target.files.length) return;
+        const file = e.target.files[0];
+
+        let b1 = file.slice(0, file.size / 2);
+        let b2 = file.slice(file.size / 2);
+        let options = {total: 2, suffix: file.name.split('.').reverse()[0]};
+
+        let res = await checkUpload({name: file.name, ...options});
+        options.id = res;
+        uploadData(b1, {...options, current: 1}).then(res=>console.log(res));
+        uploadData(b2, {...options, current: 2}).then(res=>console.log(res));
+
+        async function checkUpload(options) {
+            let f = new FormData();
+            Object.keys(options).map(key => {
+                f.set(key, options[key]);
+            })
+            return await fetch('http://localhost:8080/check', {
+                method: 'post',
+                body: f,
+            }).then(res => {
+                return res.text();
+            }).catch(err => {
+                return err
+            })
+        }
+
+        async function uploadData(data, options) {
+            let f = new FormData();
+            f.set("file", data);
+            Object.keys(options).map(key => {
+                f.set(key, options[key]);
+            })
+
+            return await fetch('http://localhost:8080/upload', {
+                method: 'post',
+                body: f
+            }).then(res => {
+                return res.text();
+            }).catch(err => {
+                return err
+            })
+        }
+    }
+</script>
+</body>
+</html>
