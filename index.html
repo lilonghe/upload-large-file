@@ -6,53 +6,101 @@
 </head>
 <body>
 <form name="form">
-    <input name="file" type="file">
+    <input name="file" type="file"><br/>
+    <input name="process" readonly placeholder="process info">
 </form>
 <script>
+    let baseUrl = "http://localhost:8080/"
     document.forms.form.file.onchange = async (e) => {
         if (!e.target.files.length) return;
         const file = e.target.files[0];
 
-        let b1 = file.slice(0, file.size / 2);
-        let b2 = file.slice(file.size / 2);
-        let options = {total: 2, suffix: file.name.split('.').reverse()[0]};
+        let uploadMap = await start(file);
+        monitor(uploadMap);
+    }
 
-        let res = await checkUpload({name: file.name, ...options});
-        options.id = res;
-        uploadData(b1, {...options, current: 1}).then(res=>console.log(res));
-        uploadData(b2, {...options, current: 2}).then(res=>console.log(res));
+    function monitor(uploadMap) {
+        window.MONITOR_UPLOAD = setTimeout(() => {
+            let values =  Object.values(uploadMap);
+            let isFail = values.find(item=>!item.success);
+            let isUndone = values.find(item=>!item.end);
+            if (isUndone) {
+                document.forms.form.process.value = (values.filter(item=>item.end).length / values.length * 100).toFixed(0)+"%";
+                monitor(uploadMap);
+            } else {
+                if (!isFail) {
+                    document.forms.form.process.value = 'success upload';
+                } else {
+                    document.forms.form.process.value = `It's something wrong!`;
+                }
+            }
+        }, 50);
+    }
 
-        async function checkUpload(options) {
-            let f = new FormData();
-            Object.keys(options).map(key => {
-                f.set(key, options[key]);
-            })
-            return await fetch('http://localhost:8080/check', {
-                method: 'post',
-                body: f,
-            }).then(res => {
-                return res.text();
-            }).catch(err => {
-                return err
-            })
+    async function start(file, sliceSize=1024*1024) {
+        let total = Math.ceil(file.size / sliceSize);
+        let uploadMap = {};
+        let options = {total, suffix: file.name.split('.').reverse()[0], name: file.name, size: file.size};
+        let uploadSign = await checkUpload(options);
+        if (!uploadSign.success) {
+            alert(uploadSign.message)
+            return;
+        }
+        options.id = uploadSign.data;
+
+        for(let i=0;i<total;i++) {
+            let data = file.slice(i*sliceSize, (i+1)*sliceSize);
+            uploadMap[i+1] = {
+                current: i+1,
+                data,
+            };
         }
 
-        async function uploadData(data, options) {
-            let f = new FormData();
-            f.set("file", data);
-            Object.keys(options).map(key => {
-                f.set(key, options[key]);
-            })
+        Object.keys(uploadMap).map(key=>{
+            uploadData(uploadMap[key].data, {...options, current: key}).
+                then(res=>{
+                    if (res.success) {
+                        uploadMap[key].success = true;
+                    } else {
+                        console.log(res.message);
+                    }
+                }).finally(()=>{
+                    uploadMap[key].end = true;
+                });
+        });
+        return uploadMap;
+    }
 
-            return await fetch('http://localhost:8080/upload', {
-                method: 'post',
-                body: f
-            }).then(res => {
-                return res.text();
-            }).catch(err => {
-                return err
-            })
-        }
+    async function checkUpload(options) {
+        let f = new FormData();
+        Object.keys(options).map(key => {
+            f.set(key, options[key]);
+        })
+        return await fetch(baseUrl + 'check', {
+            method: 'post',
+            body: f,
+        }).then(res => {
+            return res.json();
+        }).catch(err => {
+            return err
+        })
+    }
+
+    async function uploadData(data, options) {
+        let f = new FormData();
+        f.set("file", data);
+        Object.keys(options).map(key => {
+            f.set(key, options[key]);
+        })
+
+        return await fetch(baseUrl + 'upload', {
+            method: 'post',
+            body: f
+        }).then(res => {
+            return res.json();
+        }).catch(err => {
+            return err
+        })
     }
 </script>
 </body>
